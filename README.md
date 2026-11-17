@@ -139,8 +139,54 @@ The offline tests use a small stub of the `genlayer` module. The stub runs the l
 
 ## Deployment
 
-GenLayer Studio: `<CONTRACT_ADDRESS>` (no constructor arguments)
+GenLayer Studio: [`0x08106B60b0b2C12c63F2E3054E7D0B1400cC7965`](https://explorer-studio.genlayer.com/address/0x08106B60b0b2C12c63F2E3054E7D0B1400cC7965) (no constructor arguments)
 
 The deployed contract is exactly `contracts/presale_gate.py` in this repo.
+
+## Studio test evidence (Nov 17, 2026)
+
+* Account 1 = team `0xA40774…dfbb`
+* Account 2 = buyer `0xaeD00d…4813`
+
+Screenshots are in `evidence/`.
+
+**Scenario A: verified launch, team paid (sale 0)**
+
+| Step | Call | Result |
+|---|---|---|
+| A1 | `create_sale("DemoGate","DEMOG","evm","gurusankar55.github.io",1 GEN,100 GEN,180,900)` | `"0"` |
+| A2 | `contribute("0")` + 2 GEN (buyer) | `2000000000000000000` |
+| A3 | `get_status("0")` after sale end | `AWAITING_LAUNCH` |
+| A4 | `claim_launch` by the buyer | error: only the sale creator can claim the launch |
+| A5 | `claim_launch` with `https://evil.io/launch.html` | error: evidence_url is not on the committed official domain |
+| A6a | `claim_launch` with a mistyped URL (`launch.htmll`, a 404 page) | `"NOT_PROVEN"`: `reachable:false`, no money moved, 1 attempt used |
+| A6 | `claim_launch` with `/presalegate/launch.html` | `"LAUNCHED"`: address and ticker found, both quotes found on the page, all validators agree |
+| A9 | `withdraw()` (team) | `2000000000000000000` |
+
+**Scenario B: promise only, 3 failures, buyer refunded (sale 1)**
+
+| Step | Call | Result |
+|---|---|---|
+| B1–B2 | `create_sale(…,180,1800)` → `"1"`; buyer `contribute("1")` + 2 GEN | `2000000000000000000` |
+| B3–B4 | `claim_launch` with `/presalegate/soon.html` | `"NOT_PROVEN"` twice (`address_in_page:true`, `launched:false`, `delivered:false`) |
+| B5 | same, 3rd attempt | `"FAILED_LAUNCH"` |
+| B6 | 4th claim, this time with the GOOD page | error: sale is not awaiting launch (status FAILED_LAUNCH) |
+| B7–B8 | buyer `refund("1")`, then `withdraw()` | `2000000000000000000`, then paid out |
+
+**Scenario C: soft cap not reached (sale 2)**
+
+| Step | Call | Result |
+|---|---|---|
+| C1–C2 | `create_sale("SmallCap","SMOL",…,soft 50 GEN,…,180,60)` → `"2"`; buyer `contribute("2")` + 1 GEN | raised 1 GEN |
+| C3 | `get_sale("2")` after sale end | `current_status: FAILED_SOFTCAP`, `can_refund: true` |
+| C4 | buyer `refund("2")`, then `withdraw()` | both finalized; buyer balance back to the starting amount |
+
+**Scenario D: accounting**
+
+| Check | Result |
+|---|---|
+| `get_sale_count()` | `3` |
+| `get_credit(team)` after everything | `0`: team paid once, for sale 0 only |
+| `get_credit(buyer)` after withdrawals | `0` |
 
 License: MIT
